@@ -1,3 +1,7 @@
+# Do not store datasets and experiment logs in git
+data/
+experiments/*/logs/**
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
