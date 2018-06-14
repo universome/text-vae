@@ -1,0 +1,6 @@
+title: "Default experiment"
+trainer: "VAETrainer"
+hp:
+  emb_size: 32
+  hid_size: 32
+  latent_size: 16
