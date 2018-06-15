@@ -1,6 +1,9 @@
 title: "Default experiment"
 trainer: "VAETrainer"
+plots_update_freq: 50
+batch_size: 12
+visdom-port: 3095
 hp:
-  emb_size: 32
-  hid_size: 32
-  latent_size: 16
+  emb_size: 512
+  hid_size: 512
+  latent_size: 32

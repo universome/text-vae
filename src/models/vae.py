@@ -16,6 +16,10 @@ class VAE(nn.Module):
         self.encoder = LSTMEncoder(emb_size, hid_size, vocab_size, latent_size)
         self.decoder = CNNDecoder(emb_size, hid_size, vocab_size, latent_size)
 
+        if torch.cuda.device_count() > 1:
+            self.encoder = nn.DataParallel(self.encoder)
+            self.decoder = nn.DataParallel(self.decoder)
+
     def forward(self, inputs, targets):
         # inputs, targets = batch.text[:, :-1], batch.text[:, 1:]
         encodings = self.encoder(inputs)
