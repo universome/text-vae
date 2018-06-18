@@ -2,7 +2,12 @@ title: "Default experiment"
 trainer: "VAETrainer"
 plots_update_freq: 50
 batch_size: 12
-visdom-port: 3095
+max_num_epochs: 5
+kl_beta_scheme: [0.00001, 1, 100000]
+dilations: [1,2,4,8,16]
+adam_betas: [0.5, 0.99]
+lr: 0.001
+val_freq: 100
 hp:
   emb_size: 512
   hid_size: 512
