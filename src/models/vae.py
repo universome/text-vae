@@ -13,9 +13,9 @@ class VAE(nn.Module):
         self.encoder = encoder
         self.decoder = decoder
 
-        if torch.cuda.device_count() > 1:
-            self.encoder = nn.DataParallel(self.encoder)
-            self.decoder = nn.DataParallel(self.decoder)
+        # if torch.cuda.device_count() > 1:
+        self.encoder = nn.DataParallel(self.encoder)
+        self.decoder = nn.DataParallel(self.decoder)
 
     def forward(self, inputs, targets):
         # inputs, targets = batch.text[:, :-1], batch.text[:, 1:]
@@ -30,7 +30,7 @@ class VAE(nn.Module):
         encodings = self.encoder(inputs)
         means, stds = encodings[:, :32], encodings[:, 32:]
         latents = sample(means, stds)
-        sentences = self.decoder.inference(latents, vocab)
+        sentences = self.decoder.module.inference(latents, vocab)
 
         return sentences
 

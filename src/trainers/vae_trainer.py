@@ -37,14 +37,19 @@ class VAETrainer(BaseTrainer):
 
         examples = [Example.fromlist([s], [('text', text)]) for s in lines]
         dataset = Dataset(examples, [('text', text)])
-        train_ds, val_ds, test_ds = dataset.split(split_ratio=[0.998, 0.001, 0.001])
-        self.train_ds, self.val_ds, self.test_ds = train_ds, val_ds, test_ds
-        text.build_vocab(train_ds)
+        # TODO: torchtext is insane. We pass split ratio for [train, val, test]
+        # and it returns splits for [train, test, val]
+        splits = dataset.split(split_ratio=[0.999, 0.0009, 0.0001])
+        self.train_ds, self.test_ds, self.val_ds = splits
+        text.build_vocab(self.train_ds)
 
         self.vocab = text.vocab
-        self.train_dataloader = data.BucketIterator(train_ds, batch_size)
-        self.val_dataloader = data.BucketIterator(val_ds, batch_size, repeat=False)
-        self.test_dataloader = data.BucketIterator(test_ds, batch_size, repeat=False)
+        self.train_dataloader = data.BucketIterator(self.train_ds, batch_size)
+        self.val_dataloader = data.BucketIterator(self.val_ds, batch_size, repeat=False)
+        self.test_dataloader = data.BucketIterator(self.test_ds, batch_size, repeat=False)
+
+        # print('Sizes:', len(self.train_ds.examples), len(self.val_ds.examples),
+        #                 len(self.test_ds.examples))
 
     def init_models(self):
         emb_size = self.config['hp'].get('emb_size')
@@ -99,9 +104,10 @@ class VAETrainer(BaseTrainer):
 
         for batch in self.val_dataloader:
             rec_loss, kl_loss = self.loss_on_batch(batch)
-            rec_ppl = np.exp(min(100, rec_loss.item()))
+            # rec_ppl = np.exp(min(100, rec_loss.item()))
 
-            rec_losses.append(rec_ppl)
+            # rec_losses.append(rec_ppl)
+            rec_losses.append(rec_loss.item())
             kl_losses.append(kl_loss.item())
 
         self.writer.add_scalar('val_rec_loss', np.mean(rec_losses), self.num_iters_done)
@@ -112,8 +118,9 @@ class VAETrainer(BaseTrainer):
         generated = self.inference(self.test_dataloader)
         originals = [' '.join(e.text).replace('@@ ', '') for e in self.test_ds.examples]
         bleu = compute_bleu_for_sents(generated, originals)
-        text_to_log = '\n'.join(['Original: {}\n Generated: {}\n'.format(s,o) for s,o in zip(originals, generated)])
-        # self.writer.add_text('Generated examples', text_to_log, self.num_iters_done)
+        # text = '\n'.join(['Original: {}\n Generated: {}\n'.format(s,o) for s,o in zip(originals, generated)])
+        text = '\n\n'.join(generated)
+        self.writer.add_text('Generated examples', text, self.num_iters_done)
         self.writer.add_scalar('Test BLEU', bleu, self.num_iters_done)
 
     def checkpoint(self):
