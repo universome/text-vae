@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 import numpy as np
+from firelab.utils import cudable
 
-use_cuda = torch.cuda.is_available()
 
 class CNNDecoder(nn.Module):
     def __init__(self, emb_size, hid_size, vocab_size, latent_size,
@@ -43,8 +43,7 @@ class CNNDecoder(nn.Module):
     def inference(self, z, vocab, max_len=100):
         batch_size = z.size(0)
         BOS, EOS = vocab.stoi['<bos>'], vocab.stoi['<eos>']
-        active_seqs = torch.tensor([[BOS] for _ in range(batch_size)]).long()
-        if use_cuda: active_seqs = active_seqs.cuda()
+        active_seqs = cudable(torch.tensor([[BOS] for _ in range(batch_size)]).long())
         active_seqs_idx = np.arange(batch_size)
         finished = [None for _ in range(batch_size)]
         n_finished = 0
@@ -58,12 +57,13 @@ class CNNDecoder(nn.Module):
             n_finished += finished_seqs_idx.size
 
             if finished_seqs_idx.size != 0:
-                active_seqs = active_seqs[next_tokens != EOS]
-
                 # TODO(universome)
                 # finished[finished_seqs_idx] = active_seqs.masked_select(next_tokens == EOS).cpu().numpy()
-                for i, seq in zip(finished_seqs_idx, active_seqs.masked_select(next_tokens == EOS)):
+                for i, seq in zip(finished_seqs_idx, active_seqs[next_tokens == EOS]):
                     finished[i] = seq.cpu().numpy().tolist()
+
+                active_seqs = active_seqs[next_tokens != EOS]
+                z = z[next_tokens != EOS]
 
             if n_finished == batch_size: break
 
@@ -80,8 +80,7 @@ class CNNDecoder(nn.Module):
 def shift_sequence(seq, n):
     """Prepends each sequence in a batch with n zero vectors"""
     batch_size, vec_size = seq.size(0), seq.size(-1)
-    shifts = torch.zeros(batch_size, n, vec_size)
-    if use_cuda: shifts = shifts.cuda()
+    shifts = cudable(torch.zeros(batch_size, n, vec_size))
 
     return torch.cat((shifts, seq), dim=1)
 
