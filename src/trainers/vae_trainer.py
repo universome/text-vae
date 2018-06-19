@@ -68,7 +68,7 @@ class VAETrainer(BaseTrainer):
                              lr=self.config.get('lr'),
                              betas=self.config.get('adam_betas'))
 
-        self.kl_beta_scheme = HPLinearScheme(*self.config['hp'].get('kl_beta_scheme', (0,1,1)))
+        self.kl_beta_scheme = HPLinearScheme(*self.config.get('kl_beta_scheme', (0,1,1)))
 
     def train_on_batch(self, batch):
         rec_loss, kl_loss = self.loss_on_batch(batch)
@@ -119,6 +119,8 @@ class VAETrainer(BaseTrainer):
         originals = [' '.join(e.text).replace('@@ ', '') for e in self.test_ds.examples]
         bleu = compute_bleu_for_sents(generated, originals)
         # text = '\n'.join(['Original: {}\n Generated: {}\n'.format(s,o) for s,o in zip(originals, generated)])
+        # Let's wrap in bos/eos so that we see, when empty sequence is generated
+        generated = ['[START]' + s + '[END]' for s in generated]
         text = '\n\n'.join(generated)
         self.writer.add_text('Generated examples', text, self.num_iters_done)
         self.writer.add_scalar('Test BLEU', bleu, self.num_iters_done)

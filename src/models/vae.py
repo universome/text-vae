@@ -5,19 +5,15 @@ from firelab.utils import cudable
 
 
 class VAE(nn.Module):
-    def __init__(self, encoder, decoder, latent_size):
+    def __init__(self, encoder:nn.Module, decoder:nn.Module, latent_size:int):
         super(VAE, self).__init__()
 
         self.latent_size = latent_size
 
-        self.encoder = encoder
-        self.decoder = decoder
+        self.encoder = nn.DataParallel(encoder)
+        self.decoder = nn.DataParallel(decoder)
 
-        # if torch.cuda.device_count() > 1:
-        self.encoder = nn.DataParallel(self.encoder)
-        self.decoder = nn.DataParallel(self.decoder)
-
-    def forward(self, inputs, targets):
+    def forward(self, inputs:torch.Tensor, targets):
         # inputs, targets = batch.text[:, :-1], batch.text[:, 1:]
         encodings = self.encoder(inputs)
         means, stds = encodings[:, :32], encodings[:, 32:]
@@ -26,7 +22,8 @@ class VAE(nn.Module):
 
         return latents, out
 
-    def inference(self, inputs, vocab):
+    def inference(self, inputs:torch.Tensor, vocab):
+        """Performs inference on raw sentences"""
         encodings = self.encoder(inputs)
         means, stds = encodings[:, :32], encodings[:, 32:]
         latents = sample(means, stds)
