@@ -1,9 +1,11 @@
 import os
+import math
 
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.optim import Adam, RMSprop
+from torch.nn.utils import clip_grad_norm_
 from torchtext import data
 from torchtext.data import Field, Dataset, Example
 from firelab import BaseTrainer
@@ -37,7 +39,7 @@ class VAETrainer(BaseTrainer):
         text.build_vocab(self.train_ds)
 
         self.vocab = text.vocab
-        self.train_dataloader = data.BucketIterator(self.train_ds, batch_size)
+        self.train_dataloader = data.BucketIterator(self.train_ds, batch_size, repeat=False)
         self.val_dataloader = data.BucketIterator(self.val_ds, batch_size, repeat=False)
         self.test_dataloader = data.BucketIterator(self.test_ds, batch_size, repeat=False)
 
@@ -67,6 +69,12 @@ class VAETrainer(BaseTrainer):
 
         self.optimizer.zero_grad()
         loss.backward()
+
+        grad_norm = math.sqrt((sum([w.grad.norm()**2 for w in self.vae.parameters()])))
+
+        if 'grad_clip' in self.config['hp']:
+            clip_grad_norm_(self.vae.parameters(), self.config['hp']['grad_clip'])
+
         self.optimizer.step()
 
         self.writer.add_scalar('CE loss', rec_loss, self.num_iters_done)
@@ -74,6 +82,7 @@ class VAETrainer(BaseTrainer):
         self.writer.add_scalar('KL beta', kl_beta_coef, self.num_iters_done)
         self.writer.add_scalar('Means norm', means.norm(dim=1).mean(), self.num_iters_done)
         self.writer.add_scalar('Stds norm', stds.norm(dim=1).mean(), self.num_iters_done)
+        self.writer.add_scalar('Grad norm', grad_norm, self.num_iters_done)
 
     def loss_on_batch(self, batch):
         batch.text = cudable(batch.text)
