@@ -9,7 +9,7 @@ from torchtext.data import Field, Dataset, Example
 from firelab import BaseTrainer
 from firelab.utils import cudable, HPLinearScheme, compute_param_by_scheme
 
-from src.models import VAE, LSTMEncoder, CNNDecoder
+from src.models import VAE, LSTMEncoder, LSTMDecoder, CNNDecoder
 from src.models.vae import sample
 from src.losses import KLLoss, compute_bleu_for_sents
 from src.utils.common import itos_many
@@ -48,9 +48,6 @@ class VAETrainer(BaseTrainer):
         self.val_dataloader = data.BucketIterator(self.val_ds, batch_size, repeat=False)
         self.test_dataloader = data.BucketIterator(self.test_ds, batch_size, repeat=False)
 
-        # print('Sizes:', len(self.train_ds.examples), len(self.val_ds.examples),
-        #                 len(self.test_ds.examples))
-
     def init_models(self):
         emb_size = self.config['hp'].get('emb_size')
         hid_size = self.config['hp'].get('hid_size')
@@ -61,7 +58,10 @@ class VAETrainer(BaseTrainer):
 
         dilations = self.config.get('dilations')
         encoder = LSTMEncoder(emb_size, hid_size, len(self.vocab), latent_size)
-        decoder = CNNDecoder(emb_size, hid_size, len(self.vocab), latent_size, dilations=dilations)
+        if self.config.get('decoder') == 'LSTM':
+            decoder = LSTMDecoder(emb_size, hid_size, len(self.vocab), latent_size)
+        else:
+            decoder = CNNDecoder(emb_size, hid_size, len(self.vocab), latent_size, dilations=dilations)
 
         self.vae = cudable(VAE(encoder, decoder, latent_size))
         self.optimizer = Adam(self.vae.parameters(),
@@ -88,7 +88,7 @@ class VAETrainer(BaseTrainer):
         encodings = self.vae.encoder(inputs)
         means, stds = encodings[:, :self.vae.latent_size], encodings[:, self.vae.latent_size:]
         latents = sample(means, stds)
-        recs = self.vae.decoder(latents, inputs)
+        recs = self.vae.decoder(means, inputs)
 
         rec_loss = self.rec_criterion(recs.view(-1, len(self.vocab)), trg.contiguous().view(-1))
         kl_loss = self.kl_criterion(means, stds)
@@ -96,8 +96,8 @@ class VAETrainer(BaseTrainer):
         return rec_loss, kl_loss
 
     def log_scores(self):
-        self.writer.add_scalar('rec_loss', self.rec_loss_history[-1], self.num_iters_done)
-        self.writer.add_scalar('kl_loss', self.kl_loss_history[-1], self.num_iters_done)
+        self.writer.add_scalar('CE loss', self.rec_loss_history[-1], self.num_iters_done)
+        self.writer.add_scalar('KL loss', self.kl_loss_history[-1], self.num_iters_done)
 
     def validate(self):
         rec_losses, kl_losses = [], []
