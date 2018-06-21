@@ -10,7 +10,9 @@ adam_betas: [0.5, 0.98]
 val_freq: 100
 checkpoint_freq_epochs: 1
 decoder: "LSTM"
+decoder_dropword: 0.2
 hp:
   emb_size: 512
   hid_size: 512
   latent_size: 32
+  grad_clip: 100

@@ -71,6 +71,7 @@ class VAETrainer(BaseTrainer):
         loss.backward()
 
         grad_norm = math.sqrt((sum([w.grad.norm()**2 for w in self.vae.parameters()])))
+        weights_norm = math.sqrt((sum([w.norm()**2 for w in self.vae.parameters()])))
 
         if 'grad_clip' in self.config['hp']:
             clip_grad_norm_(self.vae.parameters(), self.config['hp']['grad_clip'])
@@ -79,10 +80,10 @@ class VAETrainer(BaseTrainer):
 
         self.writer.add_scalar('CE loss', rec_loss, self.num_iters_done)
         self.writer.add_scalar('KL loss', kl_loss, self.num_iters_done)
-        self.writer.add_scalar('KL beta', kl_beta_coef, self.num_iters_done)
         self.writer.add_scalar('Means norm', means.norm(dim=1).mean(), self.num_iters_done)
         self.writer.add_scalar('Stds norm', stds.norm(dim=1).mean(), self.num_iters_done)
         self.writer.add_scalar('Grad norm', grad_norm, self.num_iters_done)
+        self.writer.add_scalar('Weights norm', weights_norm, self.num_iters_done)
 
     def loss_on_batch(self, batch):
         batch.text = cudable(batch.text)
