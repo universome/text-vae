@@ -62,8 +62,10 @@ class VAETrainer(BaseTrainer):
         self.optimizer = self.construct_optimizer()
         self.kl_beta_scheme = HPLinearScheme(*self.config.get('kl_beta_scheme', (0,1,1)))
 
+        self.try_to_load_checkpoint()
+
     def train_on_batch(self, batch):
-        rec_loss, kl_loss, (means, stds) = self.loss_on_batch(batch)
+        rec_loss, kl_loss, (means, log_stds) = self.loss_on_batch(batch)
         kl_beta_coef = compute_param_by_scheme(self.kl_beta_scheme, self.num_iters_done)
         loss = rec_loss + kl_beta_coef * kl_loss
 
@@ -72,6 +74,7 @@ class VAETrainer(BaseTrainer):
 
         grad_norm = math.sqrt((sum([w.grad.norm()**2 for w in self.vae.parameters()])))
         weights_norm = math.sqrt((sum([w.norm()**2 for w in self.vae.parameters()])))
+        weights_l_inf_norm = max([w.abs().max() for w in self.vae.parameters()])
 
         if 'grad_clip' in self.config['hp']:
             clip_grad_norm_(self.vae.parameters(), self.config['hp']['grad_clip'])
@@ -81,22 +84,23 @@ class VAETrainer(BaseTrainer):
         self.writer.add_scalar('CE loss', rec_loss, self.num_iters_done)
         self.writer.add_scalar('KL loss', kl_loss, self.num_iters_done)
         self.writer.add_scalar('Means norm', means.norm(dim=1).mean(), self.num_iters_done)
-        self.writer.add_scalar('Stds norm', stds.norm(dim=1).mean(), self.num_iters_done)
+        self.writer.add_scalar('Stds norm', log_stds.exp().norm(dim=1).mean(), self.num_iters_done)
         self.writer.add_scalar('Grad norm', grad_norm, self.num_iters_done)
         self.writer.add_scalar('Weights norm', weights_norm, self.num_iters_done)
+        self.writer.add_scalar('Weights l_inf norm', weights_l_inf_norm, self.num_iters_done)
 
     def loss_on_batch(self, batch):
         batch.text = cudable(batch.text)
         inputs, trg = batch.text[:, :-1], batch.text[:, 1:]
         encodings = self.vae.encoder(inputs)
-        means, stds = encodings[:, :self.vae.latent_size], encodings[:, self.vae.latent_size:]
-        latents = sample(means, stds)
+        means, log_stds = encodings[:, :self.vae.latent_size], encodings[:, self.vae.latent_size:]
+        latents = sample(means, log_stds.exp())
         recs = self.vae.decoder(latents, inputs)
 
         rec_loss = self.rec_criterion(recs.view(-1, len(self.vocab)), trg.contiguous().view(-1))
-        kl_loss = self.kl_criterion(means, stds)
+        kl_loss = self.kl_criterion(means, log_stds)
 
-        return rec_loss, kl_loss, (means, stds)
+        return rec_loss, kl_loss, (means, log_stds)
 
     def validate(self):
         rec_losses, kl_losses = [], []
@@ -125,7 +129,17 @@ class VAETrainer(BaseTrainer):
         self.writer.add_scalar('Test BLEU', bleu, self.num_iters_done)
 
     def checkpoint(self):
-        self.save_model(self.vae, 'vae')
+        self.save_module_state(self.vae, 'vae')
+        self.save_module_state(self.optimizer, 'optimizer')
+
+    def try_to_load_checkpoint(self):
+        if not 'start_from_checkpoint' in self.config: return
+
+        self.num_iters_done = self.config.get('start_from_checkpoint')
+        self.num_epochs_done = len(self.train_dataloader) % self.num_iters_done
+
+        self.load_module_state(self.vae, 'vae', self.num_iters_done)
+        self.load_module_state(self.optimizer, 'optimizer', self.num_iters_done)
 
     def inference(self, dataloader):
         """
@@ -139,8 +153,15 @@ class VAETrainer(BaseTrainer):
         return itos_many(seqs, self.vocab)
 
     def construct_optimizer(self):
+        """
+        Builds an optimizer according to config arguments
+        """
+        weight_decay = self.config.get('weight_decay', 0)
+
         if self.config.get('optimizer') == 'RMSProp':
-            return RMSprop(self.vae.parameters(), lr=self.config.get('lr'))
+            return RMSprop(self.vae.parameters(), lr=self.config.get('lr'),
+                           weight_decay=weight_decay)
         else:
             return Adam(self.vae.parameters(), lr=self.config.get('lr'),
-                        betas=self.config.get('adam_betas'))
+                        betas=self.config.get('adam_betas'),
+                        weight_decay=weight_decay)
