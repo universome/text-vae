@@ -17,6 +17,6 @@ class LSTMEncoder(nn.Module):
     def forward(self, sentence):
         embeds = self.embeddings(sentence)
         _, (last_hidden_state, _) = self.lstm(embeds)
-        dist = self.hid_to_z(last_hidden_state.squeeze(0))
+        out = self.hid_to_z(last_hidden_state.squeeze(0))
 
-        return dist
+        return out

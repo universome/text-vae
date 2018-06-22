@@ -14,13 +14,12 @@ class KLLoss(nn.Module):
         return loss
 
 
-def kld_between_isotropic_and_standard(means, stds):
+def kld_between_isotropic_and_standard(means, log_stds):
     """
     Computes distance between isotropic normal and standard normal distributions
     """
     means_term = means.pow(2).sum(dim=1)
-    stds_term = stds.pow(2).sum(dim=1)
-    log_stds_term = stds.pow(2).log().sum(dim=1)
-    n_dim = means.size(1)
+    log_stds_term = 2 * log_stds.sum(dim=1)
+    stds_term = log_stds.exp().pow(2).sum(dim=1)
 
-    return 0.5 * (means_term + stds_term - log_stds_term - n_dim)
+    return 0.5 * (means_term + stds_term - log_stds_term - 1)
