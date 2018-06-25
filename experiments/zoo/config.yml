@@ -1,18 +1,20 @@
 title: "Default experiment"
 trainer: "VAETrainer"
 plots_update_freq: 50
-batch_size: 12
-max_num_epochs: 30
-kl_beta_scheme: [0, 1, 50000]
+batch_size: 8
+max_num_epochs: 5
+kl_beta_scheme: [0, 1, 100000]
 dilations: [1,2,4,8,16]
-lr: 0.005
-adam_betas: [0.5, 0.98]
-val_freq: 100
+lr: 0.001
+# adam_betas: [0.9, 0.98]
+val_freq: 200
 checkpoint_freq_epochs: 1
 decoder: "LSTM"
-decoder_dropword: 0.2
+decoder_dropword_scheme: [0.7, 0, 100000]
+random_seed: 42
+# start_from_checkpoint: 16650
 hp:
-  emb_size: 512
-  hid_size: 512
-  latent_size: 32
+  emb_size: 1024
+  hid_size: 1024
+  latent_size: 64
   grad_clip: 100

@@ -9,3 +9,4 @@ Random thoughts:
 - How can we formulate "disentaglement" more formally? Is it just variable independence?
 - Yes/no glasses, yes/no smiling and all of them are different. For each/some normal attribute we should keep a binary attribute, denoting its off/on state.
 - Group latent dimensions into inter-dependent blocks and allow covariance in each block. Our covariance matrix is a block matrix.
+- When using categorical prior, we do not want to specify, how many categories there are. Can we give a lot of categories, but make it a pain to use a new category each time? So model will try to be compact. Or it is happening already in normal KL loss?

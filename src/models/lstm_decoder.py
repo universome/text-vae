@@ -18,14 +18,14 @@ class LSTMDecoder(nn.Module):
         self.embs_to_logits = nn.Linear(hid_size, vocab_size)
         self.embs_to_logits.weight = self.embeddings.weight # Sharing weights
 
-    def forward(self, z, sentences):
+    def forward(self, z, sentences, dropword_p=0):
         # First, let's compute decoder initial state based on latent vector
         initial_states = self.z_to_states(z)
         states = initial_states[:, :self.hid_size], initial_states[:, self.hid_size:]
         states = (states[0].unsqueeze(0).contiguous(), states[1].unsqueeze(0).contiguous())
 
         embeds = self.embeddings(sentences)
-        embeds = self.dropword(embeds)
+        embeds = self.dropword(embeds, dropword_p)
         hidden_states, _ = self.lstm(embeds, states)
         logits = self.embs_to_logits(hidden_states)
 

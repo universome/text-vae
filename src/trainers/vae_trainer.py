@@ -61,6 +61,7 @@ class VAETrainer(BaseTrainer):
         self.vae = cudable(VAE(encoder, decoder, latent_size))
         self.optimizer = self.construct_optimizer()
         self.kl_beta_scheme = HPLinearScheme(*self.config.get('kl_beta_scheme', (0,1,1)))
+        self.decoder_dropword_scheme = HPLinearScheme(*self.config.get('decoder_dropword_scheme', (0,0,1)))
 
         self.try_to_load_checkpoint()
 
@@ -95,7 +96,8 @@ class VAETrainer(BaseTrainer):
         encodings = self.vae.encoder(inputs)
         means, log_stds = encodings[:, :self.vae.latent_size], encodings[:, self.vae.latent_size:]
         latents = sample(means, log_stds.exp())
-        recs = self.vae.decoder(latents, inputs)
+        dropword_p = compute_param_by_scheme(self.decoder_dropword_scheme, self.num_iters_done)
+        recs = self.vae.decoder(latents, inputs, dropword_p=dropword_p)
 
         rec_loss = self.rec_criterion(recs.view(-1, len(self.vocab)), trg.contiguous().view(-1))
         kl_loss = self.kl_criterion(means, log_stds)
@@ -163,5 +165,5 @@ class VAETrainer(BaseTrainer):
                            weight_decay=weight_decay)
         else:
             return Adam(self.vae.parameters(), lr=self.config.get('lr'),
-                        betas=self.config.get('adam_betas'),
+                        betas=self.config.get('adam_betas', (0.9, 0.999)),
                         weight_decay=weight_decay)
