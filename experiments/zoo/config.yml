@@ -14,6 +14,7 @@ decoder_dropword_scheme: [0.5, 0, 100000]
 random_seed: 42
 noiseness_scheme: [0.001, 1, 100000]
 # start_from_checkpoint: 16650
+kl_threshold: [100, 5, 100000]
 hp:
   emb_size: 1024
   hid_size: 1024

@@ -64,15 +64,19 @@ class VAETrainer(BaseTrainer):
         self.decoder_dropword_scheme = HPLinearScheme(*self.config.get('decoder_dropword_scheme', (0,0,1)))
         self.noiseness_scheme = HPLinearScheme(*self.config.get('noiseness_scheme', (1,1,1)))
 
+        # We optimize KL only when the threshold is passed
+        self.kl_threshold_scheme = HPLinearScheme(*self.config.get('kl_threshold', (0,0,1)))
+
         self.try_to_load_checkpoint()
 
     def train_on_batch(self, batch):
         self.train_mode()
 
         kl_beta_coef = compute_param_by_scheme(self.kl_beta_scheme, self.num_iters_done)
+        kl_threshold = compute_param_by_scheme(self.kl_threshold_scheme, self.num_iters_done)
 
         rec_loss, kl_loss, (means, log_stds) = self.loss_on_batch(batch)
-        loss = rec_loss + kl_beta_coef * kl_loss
+        loss = rec_loss + kl_beta_coef * max(kl_threshold, kl_loss)
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -88,6 +92,8 @@ class VAETrainer(BaseTrainer):
 
         self.writer.add_scalar('CE loss', rec_loss, self.num_iters_done)
         self.writer.add_scalar('KL loss', kl_loss, self.num_iters_done)
+        self.writer.add_scalar('KL threshold', kl_threshold, self.num_iters_done)
+        self.writer.add_scalar('KL beta', kl_beta_coef, self.num_iters_done)
         self.writer.add_scalar('Means norm', means.norm(dim=1).mean(), self.num_iters_done)
         self.writer.add_scalar('Stds norm', log_stds.exp().norm(dim=1).mean(), self.num_iters_done)
         self.writer.add_scalar('Grad norm', grad_norm, self.num_iters_done)
@@ -125,10 +131,14 @@ class VAETrainer(BaseTrainer):
 
         self.writer.add_scalar('val_rec_loss', np.mean(rec_losses), self.num_iters_done)
         self.writer.add_scalar('val_kl_loss', np.mean(kl_losses), self.num_iters_done)
-        self.test()
+        self.validate_predictions()
 
-    def test(self):
-        generated = self.inference(self.test_dataloader)
+    def validate_predictions(self):
+        """
+        Performs inference on a val dataloader
+        (computes predictions without teacher's forcing)
+        """
+        generated = self.inference(self.val_dataloader)
         originals = [' '.join(e.text).replace('@@ ', '') for e in self.test_ds.examples]
         bleu = compute_bleu_for_sents(generated, originals)
         # text = '\n'.join(['Original: {}\n Generated: {}\n'.format(s,o) for s,o in zip(originals, generated)])
@@ -136,13 +146,16 @@ class VAETrainer(BaseTrainer):
         generated = ['[START]' + s + '[END]' for s in generated]
         text = '\n\n'.join(generated)
         self.writer.add_text('Generated examples', text, self.num_iters_done)
-        self.writer.add_scalar('Test BLEU', bleu, self.num_iters_done)
+        self.writer.add_scalar('Validation BLEU', bleu, self.num_iters_done)
 
     def checkpoint(self):
         self.save_module_state(self.vae, 'vae')
         self.save_module_state(self.optimizer, 'optimizer')
 
     def try_to_load_checkpoint(self):
+        """
+        Loads model state from checkpoint if it is provided
+        """
         if not 'start_from_checkpoint' in self.config: return
 
         self.num_iters_done = self.config.get('start_from_checkpoint')
@@ -181,4 +194,3 @@ class VAETrainer(BaseTrainer):
 
     def eval_mode(self):
         self.vae.eval()
-
