@@ -6,12 +6,13 @@ max_num_epochs: 5
 kl_beta_scheme: [0, 1, 100000]
 dilations: [1,2,4,8,16]
 lr: 0.001
-# adam_betas: [0.9, 0.98]
+adam_betas: [0.7, 0.98]
 val_freq: 200
 checkpoint_freq_epochs: 1
 decoder: "LSTM"
-decoder_dropword_scheme: [0.7, 0, 100000]
+decoder_dropword_scheme: [0.5, 0, 100000]
 random_seed: 42
+noiseness_scheme: [0.001, 1, 100000]
 # start_from_checkpoint: 16650
 hp:
   emb_size: 1024

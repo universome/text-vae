@@ -18,8 +18,8 @@ def kld_between_isotropic_and_standard(means, log_stds):
     """
     Computes distance between isotropic normal and standard normal distributions
     """
-    means_term = means.pow(2).sum(dim=1)
-    log_stds_term = 2 * log_stds.sum(dim=1)
-    stds_term = log_stds.exp().pow(2).sum(dim=1)
+    means_term = means.pow(2)
+    log_stds_term = 2 * log_stds
+    stds_term = log_stds.exp().pow(2)
 
-    return 0.5 * (means_term + stds_term - log_stds_term - 1)
+    return 0.5 * (means_term + stds_term - log_stds_term - 1).sum(dim=1)

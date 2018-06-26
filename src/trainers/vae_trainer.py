@@ -60,14 +60,18 @@ class VAETrainer(BaseTrainer):
 
         self.vae = cudable(VAE(encoder, decoder, latent_size))
         self.optimizer = self.construct_optimizer()
-        self.kl_beta_scheme = HPLinearScheme(*self.config.get('kl_beta_scheme', (0,1,1)))
+        self.kl_beta_scheme = HPLinearScheme(*self.config.get('kl_beta_scheme', (1,1,1)))
         self.decoder_dropword_scheme = HPLinearScheme(*self.config.get('decoder_dropword_scheme', (0,0,1)))
+        self.noiseness_scheme = HPLinearScheme(*self.config.get('noiseness_scheme', (1,1,1)))
 
         self.try_to_load_checkpoint()
 
     def train_on_batch(self, batch):
-        rec_loss, kl_loss, (means, log_stds) = self.loss_on_batch(batch)
+        self.train_mode()
+
         kl_beta_coef = compute_param_by_scheme(self.kl_beta_scheme, self.num_iters_done)
+
+        rec_loss, kl_loss, (means, log_stds) = self.loss_on_batch(batch)
         loss = rec_loss + kl_beta_coef * kl_loss
 
         self.optimizer.zero_grad()
@@ -91,12 +95,14 @@ class VAETrainer(BaseTrainer):
         self.writer.add_scalar('Weights l_inf norm', weights_l_inf_norm, self.num_iters_done)
 
     def loss_on_batch(self, batch):
+        noiseness = compute_param_by_scheme(self.noiseness_scheme, self.num_iters_done)
+        dropword_p = compute_param_by_scheme(self.decoder_dropword_scheme, self.num_iters_done)
+
         batch.text = cudable(batch.text)
         inputs, trg = batch.text[:, :-1], batch.text[:, 1:]
         encodings = self.vae.encoder(inputs)
         means, log_stds = encodings[:, :self.vae.latent_size], encodings[:, self.vae.latent_size:]
-        latents = sample(means, log_stds.exp())
-        dropword_p = compute_param_by_scheme(self.decoder_dropword_scheme, self.num_iters_done)
+        latents = sample(means, noiseness * log_stds.exp())
         recs = self.vae.decoder(latents, inputs, dropword_p=dropword_p)
 
         rec_loss = self.rec_criterion(recs.view(-1, len(self.vocab)), trg.contiguous().view(-1))
@@ -105,6 +111,8 @@ class VAETrainer(BaseTrainer):
         return rec_loss, kl_loss, (means, log_stds)
 
     def validate(self):
+        self.eval_mode()
+
         rec_losses, kl_losses = [], []
 
         for batch in self.val_dataloader:
@@ -167,3 +175,10 @@ class VAETrainer(BaseTrainer):
             return Adam(self.vae.parameters(), lr=self.config.get('lr'),
                         betas=self.config.get('adam_betas', (0.9, 0.999)),
                         weight_decay=weight_decay)
+
+    def train_mode(self):
+        self.vae.train()
+
+    def eval_mode(self):
+        self.vae.eval()
+
