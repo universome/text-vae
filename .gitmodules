@@ -1,0 +1,6 @@
+[submodule "ext-libs/subword-nmt"]
+	path = ext-libs/subword-nmt
+	url = https://github.com/rsennrich/subword-nmt
+[submodule "ext-libs/mosesdecoder"]
+	path = ext-libs/mosesdecoder
+	url = https://github.com/moses-smt/mosesdecoder

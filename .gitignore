@@ -1,6 +1,7 @@
 # Do not store datasets and experiment logs in git
 data/
 experiments/*/logs/**
+experiments/*/checkpoints/**
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
