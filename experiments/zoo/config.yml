@@ -1,10 +1,10 @@
 title: "Default experiment"
 trainer: "VAETrainer"
+data: "data/subs.ru.tok.bpe.normal.random300k"
 plots_update_freq: 50
-batch_size: 8
-max_num_epochs: 5
+batch_size: 16
+max_num_epochs: 10
 kl_beta_scheme: [0, 1, 100000]
-dilations: [1,2,4,8,16]
 lr: 0.001
 adam_betas: [0.7, 0.98]
 val_freq: 200

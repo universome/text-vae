@@ -24,7 +24,7 @@ class VAETrainer(BaseTrainer):
     def init_dataloaders(self):
         batch_size = self.config.get('batch_size', 8)
         project_path = self.config['firelab']['project_path']
-        data_path = os.path.join(project_path, 'data/yelp-reviews.tok.bpe.random100k')
+        data_path = os.path.join(project_path, self.config['data'])
 
         with open(data_path) as f: lines = f.read().splitlines()
 
