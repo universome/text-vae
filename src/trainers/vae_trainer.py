@@ -51,11 +51,11 @@ class VAETrainer(BaseTrainer):
         self.rec_criterion = nn.CrossEntropyLoss(size_average=True)
         self.kl_criterion = KLLoss()
 
-        dilations = self.config.get('dilations')
         encoder = LSTMEncoder(emb_size, hid_size, len(self.vocab), latent_size)
         if self.config.get('decoder') == 'LSTM':
             decoder = LSTMDecoder(emb_size, hid_size, len(self.vocab), latent_size)
         else:
+            dilations = self.config.get('dilations')
             decoder = CNNDecoder(emb_size, hid_size, len(self.vocab), latent_size, dilations=dilations)
 
         self.vae = cudable(VAE(encoder, decoder, latent_size))
@@ -143,7 +143,7 @@ class VAETrainer(BaseTrainer):
         bleu = compute_bleu_for_sents(generated, originals)
         # text = '\n'.join(['Original: {}\n Generated: {}\n'.format(s,o) for s,o in zip(originals, generated)])
         # Let's wrap in bos/eos so that we see, when empty sequence is generated
-        generated = ['[START]' + s + '[END]' for s in generated]
+        generated = ['|{}|=>|{}|'.format(o,g) for o,g in zip(originals, generated)]
         text = '\n\n'.join(generated)
         self.writer.add_text('Generated examples', text, self.num_iters_done)
         self.writer.add_scalar('Validation BLEU', bleu, self.num_iters_done)
@@ -156,10 +156,10 @@ class VAETrainer(BaseTrainer):
         """
         Loads model state from checkpoint if it is provided
         """
-        if not 'start_from_checkpoint' in self.config: return
+        if not 'continue_from_iter' in self.config['firelab']: return
 
-        self.num_iters_done = self.config.get('start_from_checkpoint')
-        self.num_epochs_done = len(self.train_dataloader) % self.num_iters_done
+        self.num_iters_done = self.config['firelab'].get('continue_from_iter')
+        self.num_epochs_done = self.num_iters_done // len(self.train_dataloader)
 
         self.load_module_state(self.vae, 'vae', self.num_iters_done)
         self.load_module_state(self.optimizer, 'optimizer', self.num_iters_done)
