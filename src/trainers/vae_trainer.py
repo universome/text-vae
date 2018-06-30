@@ -60,23 +60,20 @@ class VAETrainer(BaseTrainer):
 
         self.vae = cudable(VAE(encoder, decoder, latent_size))
         self.optimizer = self.construct_optimizer()
-        self.kl_beta_scheme = HPLinearScheme(*self.config.get('kl_beta_scheme', (1,1,1)))
+        self.desired_kl_val = HPLinearScheme(*self.config.get('desired_kl_val', (0,0,1)))
+        self.force_kl = self.config.get('force_kl', 1)
         self.decoder_dropword_scheme = HPLinearScheme(*self.config.get('decoder_dropword_scheme', (0,0,1)))
         self.noiseness_scheme = HPLinearScheme(*self.config.get('noiseness_scheme', (1,1,1)))
-
-        # We optimize KL only when the threshold is passed
-        self.kl_threshold_scheme = HPLinearScheme(*self.config.get('kl_threshold', (0,0,1)))
 
         self.try_to_load_checkpoint()
 
     def train_on_batch(self, batch):
         self.train_mode()
 
-        kl_beta_coef = compute_param_by_scheme(self.kl_beta_scheme, self.num_iters_done)
-        kl_threshold = compute_param_by_scheme(self.kl_threshold_scheme, self.num_iters_done)
+        desired_kl = compute_param_by_scheme(self.desired_kl_val, self.num_iters_done)
 
         rec_loss, kl_loss, (means, log_stds) = self.loss_on_batch(batch)
-        loss = rec_loss + kl_beta_coef * max(kl_threshold, kl_loss)
+        loss = rec_loss + self.force_kl * abs(kl_loss - desired_kl)
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -92,8 +89,7 @@ class VAETrainer(BaseTrainer):
 
         self.writer.add_scalar('CE loss', rec_loss, self.num_iters_done)
         self.writer.add_scalar('KL loss', kl_loss, self.num_iters_done)
-        self.writer.add_scalar('KL threshold', kl_threshold, self.num_iters_done)
-        self.writer.add_scalar('KL beta', kl_beta_coef, self.num_iters_done)
+        self.writer.add_scalar('Desired KL', desired_kl, self.num_iters_done)
         self.writer.add_scalar('Means norm', means.norm(dim=1).mean(), self.num_iters_done)
         self.writer.add_scalar('Stds norm', log_stds.exp().norm(dim=1).mean(), self.num_iters_done)
         self.writer.add_scalar('Grad norm', grad_norm, self.num_iters_done)
