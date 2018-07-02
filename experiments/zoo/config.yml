@@ -1,10 +1,8 @@
 title: "Default experiment"
 trainer: "VAETrainer"
 data: "data/quora/quora.tok.bpe"
-plots_update_freq: 50
 batch_size: 32
-max_num_epochs: 30
-kl_beta_scheme: [0, 1, 100000]
+max_num_epochs: 10
 lr: 0.001
 adam_betas: [0.7, 0.98]
 val_freq: 200
@@ -13,9 +11,8 @@ decoder: "LSTM"
 decoder_dropword_scheme: [0.5, 0, 100000]
 random_seed: 42
 noiseness_scheme: [0.001, 1, 100000]
-# kl_threshold: [100, 5, 100000]
-desired_kl_val: [10, 100, 100000]
-force_kl: 1000
+desired_kl_val: [10, 25, 100000]
+force_kl: 10
 hp:
   emb_size: 1024
   hid_size: 1024

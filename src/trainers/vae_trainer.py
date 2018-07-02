@@ -104,11 +104,11 @@ class VAETrainer(BaseTrainer):
         inputs, trg = batch.text[:, :-1], batch.text[:, 1:]
         encodings = self.vae.encoder(inputs)
         means, log_stds = encodings[:, :self.vae.latent_size], encodings[:, self.vae.latent_size:]
-        latents = sample(means, noiseness * log_stds.exp())
+        latents = sample(means, noiseness * torch.ones_like(log_stds))
         recs = self.vae.decoder(latents, inputs, dropword_p=dropword_p)
 
         rec_loss = self.rec_criterion(recs.view(-1, len(self.vocab)), trg.contiguous().view(-1))
-        kl_loss = self.kl_criterion(means, log_stds)
+        kl_loss = self.kl_criterion(means, torch.zeros_like(log_stds))
 
         return rec_loss, kl_loss, (means, log_stds)
 
