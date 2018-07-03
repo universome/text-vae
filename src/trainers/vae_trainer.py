@@ -11,7 +11,7 @@ from torchtext.data import Field, Dataset, Example
 from firelab import BaseTrainer
 from firelab.utils import cudable, HPLinearScheme, compute_param_by_scheme
 
-from src.models import VAE, LSTMEncoder, LSTMDecoder, CNNDecoder
+from src.models import VAE, RNNEncoder, RNNDecoder, CNNDecoder
 from src.models.vae import sample
 from src.losses import KLLoss, compute_bleu_for_sents
 from src.utils.common import itos_many
@@ -40,20 +40,22 @@ class VAETrainer(BaseTrainer):
 
         self.vocab = text.vocab
         self.train_dataloader = data.BucketIterator(self.train_ds, batch_size, repeat=False)
-        self.val_dataloader = data.BucketIterator(self.val_ds, batch_size, repeat=False)
-        self.test_dataloader = data.BucketIterator(self.test_ds, batch_size, repeat=False)
+        self.val_dataloader = data.BucketIterator(self.val_ds, batch_size, train=False, sort=False)
+        self.test_dataloader = data.BucketIterator(self.test_ds, batch_size, train=False, sort=False)
 
     def init_models(self):
         emb_size = self.config['hp'].get('emb_size')
         hid_size = self.config['hp'].get('hid_size')
         latent_size = self.config['hp'].get('latent_size')
 
-        self.rec_criterion = nn.CrossEntropyLoss(size_average=True)
+        weights = cudable(torch.ones(len(self.vocab)))
+        weights[self.vocab.stoi['<pad>']] = 0
+        self.rec_criterion = nn.CrossEntropyLoss(weights, size_average=True)
         self.kl_criterion = KLLoss()
 
-        encoder = LSTMEncoder(emb_size, hid_size, len(self.vocab), latent_size)
+        encoder = RNNEncoder(emb_size, hid_size, len(self.vocab), latent_size)
         if self.config.get('decoder') == 'LSTM':
-            decoder = LSTMDecoder(emb_size, hid_size, len(self.vocab), latent_size)
+            decoder = RNNDecoder(emb_size, hid_size, len(self.vocab), latent_size)
         else:
             dilations = self.config.get('dilations')
             decoder = CNNDecoder(emb_size, hid_size, len(self.vocab), latent_size, dilations=dilations)
@@ -61,7 +63,7 @@ class VAETrainer(BaseTrainer):
         self.vae = cudable(VAE(encoder, decoder, latent_size))
         self.optimizer = self.construct_optimizer()
         self.desired_kl_val = HPLinearScheme(*self.config.get('desired_kl_val', (0,0,1)))
-        self.force_kl = self.config.get('force_kl', 1)
+        self.force_kl = HPLinearScheme(*self.config.get('force_kl', (1,1,1)))
         self.decoder_dropword_scheme = HPLinearScheme(*self.config.get('decoder_dropword_scheme', (0,0,1)))
         self.noiseness_scheme = HPLinearScheme(*self.config.get('noiseness_scheme', (1,1,1)))
 
@@ -70,10 +72,12 @@ class VAETrainer(BaseTrainer):
     def train_on_batch(self, batch):
         self.train_mode()
 
-        desired_kl = compute_param_by_scheme(self.desired_kl_val, self.num_iters_done)
+        # desired_kl = compute_param_by_scheme(self.desired_kl_val, self.num_iters_done)
+        # force_kl = compute_param_by_scheme(self.force_kl, self.num_iters_done)
 
-        rec_loss, kl_loss, (means, log_stds) = self.loss_on_batch(batch)
-        loss = rec_loss + self.force_kl * abs(kl_loss - desired_kl)
+        # rec_loss, kl_loss, (means, log_stds) = self.loss_on_batch(batch)
+        # loss = rec_loss + force_kl * abs(kl_loss - desired_kl)
+        loss, *_ = self.loss_on_batch(batch)
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -87,30 +91,34 @@ class VAETrainer(BaseTrainer):
 
         self.optimizer.step()
 
-        self.writer.add_scalar('CE loss', rec_loss, self.num_iters_done)
-        self.writer.add_scalar('KL loss', kl_loss, self.num_iters_done)
-        self.writer.add_scalar('Desired KL', desired_kl, self.num_iters_done)
-        self.writer.add_scalar('Means norm', means.norm(dim=1).mean(), self.num_iters_done)
-        self.writer.add_scalar('Stds norm', log_stds.exp().norm(dim=1).mean(), self.num_iters_done)
+        self.writer.add_scalar('CE loss', loss, self.num_iters_done)
+        # self.writer.add_scalar('CE loss', rec_loss, self.num_iters_done)
+        # self.writer.add_scalar('KL loss', kl_loss, self.num_iters_done)
+        # self.writer.add_scalar('Desired KL', desired_kl, self.num_iters_done)
+        # self.writer.add_scalar('Force KL', force_kl, self.num_iters_done)
+        # self.writer.add_scalar('Means norm', means.norm(dim=1).mean(), self.num_iters_done)
+        # self.writer.add_scalar('Stds norm', log_stds.exp().norm(dim=1).mean(), self.num_iters_done)
         self.writer.add_scalar('Grad norm', grad_norm, self.num_iters_done)
         self.writer.add_scalar('Weights norm', weights_norm, self.num_iters_done)
         self.writer.add_scalar('Weights l_inf norm', weights_l_inf_norm, self.num_iters_done)
 
     def loss_on_batch(self, batch):
-        noiseness = compute_param_by_scheme(self.noiseness_scheme, self.num_iters_done)
+        # noiseness = compute_param_by_scheme(self.noiseness_scheme, self.num_iters_done)
         dropword_p = compute_param_by_scheme(self.decoder_dropword_scheme, self.num_iters_done)
 
         batch.text = cudable(batch.text)
         inputs, trg = batch.text[:, :-1], batch.text[:, 1:]
-        encodings = self.vae.encoder(inputs)
-        means, log_stds = encodings[:, :self.vae.latent_size], encodings[:, self.vae.latent_size:]
-        latents = sample(means, noiseness * torch.ones_like(log_stds))
+        encodings = self.vae.encoder(batch.text)
+        # means, log_stds = encodings[:, :self.vae.latent_size], encodings[:, self.vae.latent_size:]
+        # latents = sample(means, noiseness * torch.ones_like(log_stds))
+        latents = encodings[:, :self.vae.latent_size]
         recs = self.vae.decoder(latents, inputs, dropword_p=dropword_p)
 
         rec_loss = self.rec_criterion(recs.view(-1, len(self.vocab)), trg.contiguous().view(-1))
-        kl_loss = self.kl_criterion(means, torch.zeros_like(log_stds))
+        # kl_loss = self.kl_criterion(means, torch.zeros_like(log_stds))
 
-        return rec_loss, kl_loss, (means, log_stds)
+        # return rec_loss, kl_loss, (means, log_stds)
+        return rec_loss, 0, (0, 0)
 
     def validate(self):
         self.eval_mode()
@@ -123,10 +131,10 @@ class VAETrainer(BaseTrainer):
 
             # rec_losses.append(rec_ppl)
             rec_losses.append(rec_loss.item())
-            kl_losses.append(kl_loss.item())
+            # kl_losses.append(kl_loss.item())
 
         self.writer.add_scalar('val_rec_loss', np.mean(rec_losses), self.num_iters_done)
-        self.writer.add_scalar('val_kl_loss', np.mean(kl_losses), self.num_iters_done)
+        # self.writer.add_scalar('val_kl_loss', np.mean(kl_losses), self.num_iters_done)
         self.validate_predictions()
 
     def validate_predictions(self):
@@ -134,13 +142,11 @@ class VAETrainer(BaseTrainer):
         Performs inference on a val dataloader
         (computes predictions without teacher's forcing)
         """
-        generated = self.inference(self.val_dataloader)
-        originals = [' '.join(e.text).replace('@@ ', '') for e in self.test_ds.examples]
+        generated, originals = self.inference(self.val_dataloader)
         bleu = compute_bleu_for_sents(generated, originals)
-        # text = '\n'.join(['Original: {}\n Generated: {}\n'.format(s,o) for s,o in zip(originals, generated)])
-        # Let's wrap in bos/eos so that we see, when empty sequence is generated
-        generated = ['|{}|=>|{}|'.format(o,g) for o,g in zip(originals, generated)]
+        generated = ['[{}] => [{}]'.format(o,g) for o,g in zip(originals, generated)]
         text = '\n\n'.join(generated)
+
         self.writer.add_text('Generated examples', text, self.num_iters_done)
         self.writer.add_scalar('Validation BLEU', bleu, self.num_iters_done)
 
@@ -162,14 +168,18 @@ class VAETrainer(BaseTrainer):
 
     def inference(self, dataloader):
         """
-        Produces predictions for a given dataset
+        Produces predictions for a given dataloader
         """
         seqs = []
-        for batch in dataloader:
-            inputs = cudable(batch.text[:, :-1])
-            seqs.extend(self.vae.inference(inputs, self.vocab))
+        originals = []
+        # noiseness = compute_param_by_scheme(self.noiseness_scheme, self.num_iters_done)
 
-        return itos_many(seqs, self.vocab)
+        for batch in dataloader:
+            inputs = cudable(batch.text)
+            seqs.extend(self.vae.inference(inputs, self.vocab, 0))
+            originals.extend(inputs.detach().cpu().numpy().tolist())
+
+        return itos_many(seqs, self.vocab), itos_many(originals, self.vocab)
 
     def construct_optimizer(self):
         """

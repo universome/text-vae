@@ -1,11 +1,11 @@
 from .cnn_decoder import CNNDecoder
-from .lstm_encoder import LSTMEncoder
-from .lstm_decoder import LSTMDecoder
+from .rnn_encoder import RNNEncoder
+from .rnn_decoder import RNNDecoder
 from .vae import VAE
 
 __all__ = [
     "CNNDecoder",
-    "LSTMEncoder",
-    "LSTMDecoder",
+    "RNNEncoder",
+    "RNNDecoder",
     "VAE"
 ]

@@ -23,11 +23,12 @@ class VAE(nn.Module):
 
         return latents, out
 
-    def inference(self, inputs:torch.Tensor, vocab):
+    def inference(self, inputs:torch.Tensor, vocab, noiseness=1):
         """Performs inference on raw sentences"""
         encodings = self.encoder(inputs)
         means, log_stds = encodings[:, :self.latent_size], encodings[:, self.latent_size:]
-        latents = sample(means, log_stds.exp())
+        latents = sample(means, noiseness * log_stds.exp())
+        latents = means
         sentences = inference(self.decoder.module, latents, vocab)
 
         return sentences

@@ -1,13 +1,13 @@
 import torch.nn as nn
 
 
-class LSTMEncoder(nn.Module):
+class RNNEncoder(nn.Module):
     def __init__(self, emb_size, hid_size, vocab_size, latent_size):
-        super(LSTMEncoder, self).__init__()
+        super(RNNEncoder, self).__init__()
 
         self.hid_size = hid_size
         self.embeddings = nn.Embedding(vocab_size, emb_size)
-        self.lstm = nn.LSTM(emb_size, hid_size, batch_first=True)
+        self.gru = nn.GRU(emb_size, hid_size, batch_first=True)
         self.hid_to_z = nn.Sequential(
             nn.Linear(hid_size, 256),
             nn.SELU(),
@@ -16,7 +16,7 @@ class LSTMEncoder(nn.Module):
 
     def forward(self, sentence):
         embeds = self.embeddings(sentence)
-        _, (last_hidden_state, _) = self.lstm(embeds)
+        _, last_hidden_state = self.gru(embeds)
         out = self.hid_to_z(last_hidden_state.squeeze(0))
 
         return out
