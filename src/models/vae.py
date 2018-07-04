@@ -14,24 +14,29 @@ class VAE(nn.Module):
         self.encoder = nn.DataParallel(encoder)
         self.decoder = nn.DataParallel(decoder)
 
-    def forward(self, inputs:torch.Tensor, targets):
-        # inputs, targets = batch.text[:, :-1], batch.text[:, 1:]
-        encodings = self.encoder(inputs)
-        means, stds = encodings[:, :self.latent_size], encodings[:, self.latent_size:]
-        latents = sample(means, stds)
-        out = self.decoder(latents, targets)
+        self.encodings_to_log_stds = nn.Sequential(
+            nn.Linear(latent_size, latent_size // 2),
+            nn.SELU(),
+            nn.Linear(latent_size // 2, latent_size)
+        )
 
-        return latents, out
+    def forward(self, seqs:torch.Tensor, noiseness=1, dropword_p=0):
+        encodings = self.encoder(seqs)
+        # TODO: well, actually, it is not cool to predict std from mean, but can we do?
+        means, log_stds = encodings, self.encodings_to_log_stds(encodings)
+        latents = sample(means, noiseness * log_stds.exp())
+        out = self.decoder(latents, seqs[:, :-1], dropword_p=dropword_p)
+
+        return (means, log_stds), out
 
     def inference(self, inputs:torch.Tensor, vocab, noiseness=1):
         """Performs inference on raw sentences"""
         encodings = self.encoder(inputs)
-        means, log_stds = encodings[:, :self.latent_size], encodings[:, self.latent_size:]
+        means, log_stds = encodings, self.encodings_to_log_stds(encodings)
         latents = sample(means, noiseness * log_stds.exp())
-        latents = means
-        sentences = inference(self.decoder.module, latents, vocab)
+        predictions = inference(self.decoder, latents, vocab)
 
-        return sentences
+        return predictions
 
 
 def sample(means, stds):

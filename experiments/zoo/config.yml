@@ -4,17 +4,16 @@ data: "data/quora/quora.tok.bpe"
 batch_size: 32
 max_num_epochs: 10
 lr: 0.001
-adam_betas: [0.7, 0.98]
+# adam_betas: [0.9, 0.999]
 val_freq: 200
 checkpoint_freq_epochs: 1
-decoder: "LSTM"
-decoder_dropword_scheme: [0.5, 0, 100000]
+decoder: "RNN"
+decoder_dropword_scheme: [0.2, 0, 100000]
 random_seed: 42
 noiseness_scheme: [0.001, 1, 100000]
-desired_kl_val: [10, 25, 100000]
-force_kl: 10
+desired_kl_val: [0, 0, 1]
+force_kl: [0, 1, 100000]
 hp:
   emb_size: 1024
   hid_size: 1024
-  latent_size: 64
-  grad_clip: 100
+  grad_clip: 50
