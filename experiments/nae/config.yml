@@ -1,12 +1,14 @@
-title: "Experiment with AE"
-trainer: "AETrainer"
+title: "Experiment with Noisy AE"
+trainer: "NoisyAETrainer"
 data: "data/quora/quora.tok.bpe"
 batch_size: 32
-max_num_epochs: 10
+max_num_epochs: 20
 lr: 0.001
 val_freq: 200
 decoder: "RNN"
 random_seed: 42
+noiseness_scheme: [0, 1, 100000]
+checkpoint_freq_epochs: 1
 hp:
   emb_size: 1024
   hid_size: 1024
